@@ -225,7 +225,7 @@ public class RxifiedExamples {
 
   public void websocketClient(Vertx vertx) {
     HttpClient client = vertx.createHttpClient(new HttpClientOptions());
-    client.websocketStream(8080, "localhost", "/the_uri").toObservable().subscribe(
+    client.rxWebsocket(8080, "localhost", "/the_uri").subscribe(
         ws -> {
           // Use the websocket
         },

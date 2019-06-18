@@ -172,7 +172,7 @@ class RxJava2Generator extends AbstractRxGenerator {
   }
 
   @Override
-  protected void genRxMethod(ClassModel model, MethodInfo method, boolean genBody, PrintWriter writer) {
+  protected void genRxMethod(ClassModel model, MethodInfo method, List<String> cacheDecls, boolean genBody, PrintWriter writer) {
     MethodInfo futMethod = genFutureMethod(method);
     ClassTypeInfo raw = futMethod.getReturnType().getRaw();
     String methodSimpleName = raw.getSimpleName();

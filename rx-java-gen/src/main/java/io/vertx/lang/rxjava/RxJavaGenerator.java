@@ -13,7 +13,9 @@ import io.vertx.lang.rx.AbstractRxGenerator;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 class RxJavaGenerator extends AbstractRxGenerator {
   RxJavaGenerator() {
@@ -112,8 +114,31 @@ class RxJavaGenerator extends AbstractRxGenerator {
     }
   }
 
+  private static TypeInfo unwrap(TypeInfo type) {
+    if (type instanceof ParameterizedTypeInfo) {
+      return type.getRaw();
+    } else {
+      return type;
+    }
+  }
+
+  private boolean foo(MethodInfo m1, MethodInfo m2) {
+    int numParams = m1.getParams().size();
+    if (m1.getName().equals(m2.getName()) && numParams == m2.getParams().size()) {
+      for (int index = 0; index < numParams; index++) {
+        TypeInfo t1 = unwrap(m1.getParam(index).getType());
+        TypeInfo t2 = unwrap(m2.getParam(index).getType());
+        if (!t1.equals(t2)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    return false;
+  }
+
   @Override
-  protected void genRxMethod(ClassModel model, MethodInfo method, boolean genBody, PrintWriter writer) {
+  protected void genRxMethod(ClassModel model, MethodInfo method, List<String> cacheDecls, boolean genBody, PrintWriter writer) {
     ClassTypeInfo type = model.getType();
     String packageName = type.getPackageName();
     writer.print("  ");

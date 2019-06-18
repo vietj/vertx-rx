@@ -13,6 +13,8 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.lang.annotation.Annotation;
 import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static io.vertx.codegen.type.ClassKind.*;
 import static java.util.stream.Collectors.joining;
@@ -445,12 +447,64 @@ public abstract class AbstractRxGenerator extends Generator<ClassModel> {
 
   protected abstract void genMethods(ClassModel model, MethodInfo method, List<String> cacheDecls, boolean genBody, PrintWriter writer);
 
-  protected abstract void genRxMethod(ClassModel model, MethodInfo method, boolean genBody, PrintWriter writer);
+  protected abstract void genRxMethod(ClassModel model, MethodInfo method, List<String> cacheDecls, boolean genBody, PrintWriter writer);
 
+  private static TypeInfo unwrap(TypeInfo type) {
+    if (type instanceof ParameterizedTypeInfo) {
+      return type.getRaw();
+    } else {
+      return type;
+    }
+  }
+
+  private boolean foo(MethodInfo m1, MethodInfo m2) {
+    int numParams = m1.getParams().size();
+    if (m1.getName().equals(m2.getName()) && numParams == m2.getParams().size()) {
+      for (int index = 0; index < numParams; index++) {
+        TypeInfo t1 = unwrap(m1.getParam(index).getType());
+        TypeInfo t2 = unwrap(m2.getParam(index).getType());
+        if (!t1.equals(t2)) {
+          return false;
+        }
+      }
+      return true;
+    }
+    return false;
+  }
   protected final void genMethod(ClassModel model, MethodInfo method, List<String> cacheDecls, boolean genBody, PrintWriter writer) {
-    genSimpleMethod(model, method, cacheDecls, genBody, writer);
     if (method.getKind() == MethodKind.FUTURE) {
-      genRxMethod(model, method, genBody, writer);
+      genSimpleMethod(model, method, cacheDecls, genBody, writer);
+
+      // Generate the missing method
+      MethodInfo copy = method.copy();
+      copy.getParams().remove(copy.getParams().size() - 1);
+      Optional<MethodInfo> any = Stream.concat(model.getMethods().stream(), model.getAnyJavaTypeMethods().stream()).filter(m -> foo(m, copy)).findAny();
+      if (!any.isPresent()) {
+        startMethodTemplate(model.getType(), copy, "", writer);
+        if (genBody) {
+          writer.println(" {");
+          writer.print("    ");
+          if (!copy.getReturnType().isVoid()) {
+            writer.println("return ");
+          }
+          writer.print(method.getName());
+          writer.print("(");
+          writer.print(copy.getParams().stream().map(ParamInfo::getName).collect(Collectors.joining(", ")));
+          if (copy.getParams().size() > 0) {
+            writer.print(", ");
+          }
+          writer.println("ar -> { });");
+          writer.println("  }");
+          writer.println();
+        } else {
+          writer.println(";");
+          writer.println();
+        }
+      }
+
+      genRxMethod(model, method, cacheDecls, genBody, writer);
+    } else {
+      genSimpleMethod(model, method, cacheDecls, genBody, writer);
     }
   }
 
@@ -528,7 +582,7 @@ public abstract class AbstractRxGenerator extends Generator<ClassModel> {
     return "rx" + Character.toUpperCase(method.getName().charAt(0)) + method.getName().substring(1);
   }
 
-  private void genSimpleMethod(ClassModel model, MethodInfo method, List<String> cacheDecls, boolean genBody, PrintWriter writer) {
+  protected final void genSimpleMethod(ClassModel model, MethodInfo method, List<String> cacheDecls, boolean genBody, PrintWriter writer) {
     ClassTypeInfo type = model.getType();
     startMethodTemplate(type, method, "", writer);
     if (genBody) {

@@ -166,9 +166,7 @@ public abstract class AbstractRxGenerator extends Generator<ClassModel> {
       writer.println();
 
       for (MethodInfo method : model.getMethods()) {
-        startMethodTemplate(type, method, "", writer);
-        writer.println(";");
-        writer.println();
+        genMethod(model, method, Collections.emptyList(), false, writer);
       }
 
       if (type.getRaw().getName().equals("io.vertx.core.streams.ReadStream")) {
@@ -424,10 +422,10 @@ public abstract class AbstractRxGenerator extends Generator<ClassModel> {
     }
     List<String> cacheDecls = new ArrayList<>();
     for (MethodInfo method : model.getMethods()) {
-      genMethods(model, method, cacheDecls, writer);
+      genMethods(model, method, cacheDecls, true, writer);
     }
     for (MethodInfo method : model.getAnyJavaTypeMethods()) {
-      genMethods(model, method, cacheDecls, writer);
+      genMethods(model, method, cacheDecls, true, writer);
     }
 
     for (ConstantInfo constant : model.getConstants()) {
@@ -445,14 +443,14 @@ public abstract class AbstractRxGenerator extends Generator<ClassModel> {
 
   protected abstract void genToSubscriber(TypeInfo streamType, PrintWriter writer);
 
-  protected abstract void genMethods(ClassModel model, MethodInfo method, List<String> cacheDecls, PrintWriter writer);
+  protected abstract void genMethods(ClassModel model, MethodInfo method, List<String> cacheDecls, boolean genBody, PrintWriter writer);
 
-  protected abstract void genRxMethod(ClassModel model, MethodInfo method, PrintWriter writer);
+  protected abstract void genRxMethod(ClassModel model, MethodInfo method, boolean genBody, PrintWriter writer);
 
-  protected final void genMethod(ClassModel model, MethodInfo method, List<String> cacheDecls, PrintWriter writer) {
-    genSimpleMethod(model, method, cacheDecls, writer);
+  protected final void genMethod(ClassModel model, MethodInfo method, List<String> cacheDecls, boolean genBody, PrintWriter writer) {
+    genSimpleMethod(model, method, cacheDecls, genBody, writer);
     if (method.getKind() == MethodKind.FUTURE) {
-      genRxMethod(model, method, writer);
+      genRxMethod(model, method, genBody, writer);
     }
   }
 
@@ -530,57 +528,61 @@ public abstract class AbstractRxGenerator extends Generator<ClassModel> {
     return "rx" + Character.toUpperCase(method.getName().charAt(0)) + method.getName().substring(1);
   }
 
-  private void genSimpleMethod(ClassModel model, MethodInfo method, List<String> cacheDecls, PrintWriter writer) {
+  private void genSimpleMethod(ClassModel model, MethodInfo method, List<String> cacheDecls, boolean genBody, PrintWriter writer) {
     ClassTypeInfo type = model.getType();
     startMethodTemplate(type, method, "", writer);
-    writer.println(" { ");
-    if (method.isFluent()) {
-      writer.print("    ");
-      writer.print(genInvokeDelegate(model, method));
-      writer.println(";");
-      if (method.getReturnType().isVariable()) {
-        writer.print("    return (");
-        writer.print(method.getReturnType().getName());
-        writer.println(") this;");
-      } else {
-        writer.println("    return this;");
-      }
-    } else if (method.getReturnType().getName().equals("void")) {
-      writer.print("    ");
-      writer.print(genInvokeDelegate(model, method));
-      writer.println(";");
-    } else {
-      if (method.isCacheReturn()) {
-        writer.print("    if (cached_");
-        writer.print(cacheDecls.size());
-        writer.println(" != null) {");
-
-        writer.print("      return cached_");
-        writer.print(cacheDecls.size());
+    if (genBody) {
+      writer.println(" { ");
+      if (method.isFluent()) {
+        writer.print("    ");
+        writer.print(genInvokeDelegate(model, method));
         writer.println(";");
-        writer.println("    }");
-      }
-      String cachedType;
-      TypeInfo returnType = method.getReturnType();
-      if (method.getReturnType().getKind() == PRIMITIVE) {
-        cachedType = ((PrimitiveTypeInfo) returnType).getBoxed().getName();
+        if (method.getReturnType().isVariable()) {
+          writer.print("    return (");
+          writer.print(method.getReturnType().getName());
+          writer.println(") this;");
+        } else {
+          writer.println("    return this;");
+        }
+      } else if (method.getReturnType().getName().equals("void")) {
+        writer.print("    ");
+        writer.print(genInvokeDelegate(model, method));
+        writer.println(";");
       } else {
-        cachedType = genTypeName(returnType);
+        if (method.isCacheReturn()) {
+          writer.print("    if (cached_");
+          writer.print(cacheDecls.size());
+          writer.println(" != null) {");
+
+          writer.print("      return cached_");
+          writer.print(cacheDecls.size());
+          writer.println(";");
+          writer.println("    }");
+        }
+        String cachedType;
+        TypeInfo returnType = method.getReturnType();
+        if (method.getReturnType().getKind() == PRIMITIVE) {
+          cachedType = ((PrimitiveTypeInfo) returnType).getBoxed().getName();
+        } else {
+          cachedType = genTypeName(returnType);
+        }
+        writer.print("    ");
+        writer.print(genTypeName(returnType));
+        writer.print(" ret = ");
+        writer.print(genConvReturn(returnType, method, genInvokeDelegate(model, method)));
+        writer.println(";");
+        if (method.isCacheReturn()) {
+          writer.print("    cached_");
+          writer.print(cacheDecls.size());
+          writer.println(" = ret;");
+          cacheDecls.add("private" + (method.isStaticMethod() ? " static" : "") + " " + cachedType + " cached_" + cacheDecls.size());
+        }
+        writer.println("    return ret;");
       }
-      writer.print("    ");
-      writer.print(genTypeName(returnType));
-      writer.print(" ret = ");
-      writer.print(genConvReturn(returnType, method, genInvokeDelegate(model, method)));
+      writer.println("  }");
+    } else {
       writer.println(";");
-      if (method.isCacheReturn()) {
-        writer.print("    cached_");
-        writer.print(cacheDecls.size());
-        writer.println(" = ret;");
-        cacheDecls.add("private" + (method.isStaticMethod() ? " static" : "") + " " + cachedType + " cached_" + cacheDecls.size());
-      }
-      writer.println("    return ret;");
     }
-    writer.println("  }");
     writer.println();
   }
 
